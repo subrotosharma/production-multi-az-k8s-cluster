@@ -1,0 +1,41 @@
+# Terraform
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+.terraform.lock.hcl
+terraform.tfplan
+
+# Kubernetes
+kubeconfig
+*.kubeconfig
+admin.conf
+
+# SSH Keys
+*.pem
+*.key
+id_rsa*
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets
+secrets/
+credentials/
+*.secret
+
+# Temporary files
+tmp/
+temp/
+*.tmp

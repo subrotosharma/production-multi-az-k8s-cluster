@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Service
+metadata: { name: sample-ha-app }
+spec:
+  selector: { app: sample-ha-app }
+  ports:
+    - name: http
+      port: 80
+      targetPort: 80

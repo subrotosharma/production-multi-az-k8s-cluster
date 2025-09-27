@@ -1,0 +1,12 @@
+loki:
+  replicaCount: 3
+  persistence:
+    enabled: true
+    size: 100Gi
+promtail:
+  enabled: true
+  daemonset:
+    enabled: true
+grafana:
+  enabled: true
+  adminPassword: admin123

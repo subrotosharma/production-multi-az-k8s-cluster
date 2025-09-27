@@ -1,0 +1,9 @@
+region              = "us-east-1"
+cluster_name        = "ha-cluster"
+key_pair_name       = "subrotosharma-us-east-1"       # change if your EC2 keypair differs
+create_route53      = true
+hosted_zone_id      = "Z0123456789ABC"                # replace with your Route53 Hosted Zone ID (subrotosharma.site)
+api_fqdn            = "api.k8s.subrotosharma.site"
+apps_wildcard_fqdn  = "*.apps.subrotosharma.site"
+my_ip_cidr          = "122.102.32.126/32"            # your public IP; tighten as needed
+lb_internal         = true

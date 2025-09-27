@@ -1,0 +1,12 @@
+image: ghcr.io/your-org/sample-ha-app:latest
+replicaCount: 6
+resources:
+  requests: { cpu: "100m", memory: "128Mi" }
+  limits:   { cpu: "500m", memory: "256Mi" }
+service:
+  type: ClusterIP
+  port: 80
+ingress:
+  host: app.apps.subrotosharma.site
+pvc:
+  size: 5Gi

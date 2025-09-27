@@ -1,0 +1,4 @@
+apiVersion: v2
+name: sample-ha-app
+version: 0.1.0
+description: Highly-available web app with HPA, PDB, Ingress, and PVC.

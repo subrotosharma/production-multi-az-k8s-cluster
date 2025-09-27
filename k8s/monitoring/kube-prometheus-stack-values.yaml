@@ -1,0 +1,6 @@
+grafana:
+  adminUser: admin
+  adminPassword: admin123   # change via Secret in real envs
+prometheus:
+  prometheusSpec:
+    retention: 15d

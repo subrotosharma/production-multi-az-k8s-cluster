@@ -1,0 +1,17 @@
+sysctl:
+  - { name: 'net.ipv4.ip_forward', value: '1' }
+  - { name: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+  - { name: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+  - { name: 'vm.overcommit_memory', value: '1' }
+kmods:
+  - overlay
+  - br_netfilter
+containerd_version: "1.7.20"
+keepalived_vrid: 42
+keepalived_iface: "ens192"   # change NIC name
+priority_lb1: 150
+priority_lb2: 100
+api_backends:
+  - 10.0.0.31:6443
+  - 10.0.0.32:6443
+  - 10.0.0.33:6443
