@@ -2,6 +2,12 @@
 
 Production-ready Kubernetes cluster deployed across multiple AWS availability zones using Terraform and kubeadm. Features 3 control plane nodes, 6 worker nodes, Calico CNI, EBS CSI storage, ingress-nginx, cert-manager, and comprehensive monitoring stack.
 
+## 📚 Documentation
+
+- **[Complete Deployment Guide](DEPLOYMENT_GUIDE.md)** - Step-by-step instructions for full deployment
+- **[Quick Start Guide](QUICK_START.md)** - 15-minute deployment for experienced users
+- **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
+
 ## 🏗️ Architecture
 
 - **High Availability**: 3 control plane nodes across 3 AZs
