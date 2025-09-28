@@ -14,17 +14,24 @@ WORKER_IPS=(
     "10.0.12.102"
 )
 
-# Join command
-JOIN_CMD="sudo kubeadm join 10.0.10.9:6443 --token p3lj94.4lpajtvpu3dz0z18 --discovery-token-ca-cert-hash sha256:ece29981e3ac2ae43bc10f38c5d603c139c5568342ebb5505f42fe3b99df1f66"
+# Get join command from kubeadm init output or generate new token:
+# kubeadm token create --print-join-command
 
-echo "Joining worker nodes to cluster..."
+echo "Please update JOIN_CMD with actual values from your cluster"
+echo "Example: kubeadm token create --print-join-command"
+echo "Then update this script with the real join command"
 
-for ip in "${WORKER_IPS[@]}"; do
-    echo "Joining worker node: $ip"
-    ssh -o StrictHostKeyChecking=no ubuntu@$ip "$JOIN_CMD" &
-done
-
-echo "Waiting for all joins to complete..."
-wait
-
-echo "All worker nodes join initiated. Check status with: kubectl get nodes"
+# Uncomment and update the following lines with real values:
+# JOIN_CMD="sudo kubeadm join <CONTROL_PLANE_IP>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>"
+# 
+# echo "Joining worker nodes to cluster..."
+# 
+# for ip in "${WORKER_IPS[@]}"; do
+#     echo "Joining worker node: $ip"
+#     ssh -o StrictHostKeyChecking=no ubuntu@$ip "$JOIN_CMD" &
+# done
+# 
+# echo "Waiting for all joins to complete..."
+# wait
+# 
+# echo "All worker nodes join initiated. Check status with: kubectl get nodes"

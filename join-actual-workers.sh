@@ -10,7 +10,7 @@ WORKER_IPS=(
     "10.0.12.174"
 )
 
-JOIN_CMD="sudo kubeadm join 10.0.10.9:6443 --token p3lj94.4lpajtvpu3dz0z18 --discovery-token-ca-cert-hash sha256:ece29981e3ac2ae43bc10f38c5d603c139c5568342ebb5505f42fe3b99df1f66"
+JOIN_CMD="sudo kubeadm join <CONTROL_PLANE_IP>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>"
 
 echo "Joining worker nodes to cluster..."
 

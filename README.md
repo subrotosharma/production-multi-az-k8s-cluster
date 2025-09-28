@@ -8,6 +8,12 @@ Production-ready Kubernetes cluster deployed across multiple AWS availability zo
 - **[Quick Start Guide](QUICK_START.md)** - 15-minute deployment for experienced users
 - **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
 
+### Component Documentation
+- **[Infrastructure Guide](docs/INFRASTRUCTURE.md)** - AWS infrastructure and Terraform details
+- **[Kubernetes Guide](docs/KUBERNETES.md)** - K8s components and configurations
+- **[Sample Application](docs/SAMPLE_APP.md)** - HA application deployment patterns
+- **[CI/CD Pipeline](docs/CI_CD.md)** - Automated deployment and testing
+
 ## 🏗️ Architecture
 
 - **High Availability**: 3 control plane nodes across 3 AZs
