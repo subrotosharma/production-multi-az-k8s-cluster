@@ -2,6 +2,28 @@
 
 Production-ready Kubernetes cluster deployed across multiple AWS availability zones using Terraform and kubeadm. Features 3 control plane nodes, 6 worker nodes, Calico CNI, EBS CSI storage, ingress-nginx, cert-manager, and comprehensive monitoring stack.
 
+## 🚀 One-Command Deployment
+
+```bash
+# Clone the repository
+git clone https://github.com/subrotosharma/production-multi-az-k8s-cluster.git
+cd production-multi-az-k8s-cluster
+
+# Configure your AWS credentials
+aws configure
+
+# Deploy everything automatically
+./deploy-full-automation.sh
+```
+
+**That's it!** The script will:
+1. Deploy AWS infrastructure (VPC, subnets, instances, load balancers)
+2. Initialize the first control plane node
+3. Install Calico CNI, Helm, and essential components
+4. Join remaining control plane and worker nodes
+5. Deploy a sample HA application
+6. Verify the entire cluster
+
 ## 📚 Documentation
 
 - **[Complete Deployment Guide](DEPLOYMENT_GUIDE.md)** - Step-by-step instructions for full deployment
@@ -25,58 +47,34 @@ Production-ready Kubernetes cluster deployed across multiple AWS availability zo
 - **Storage**: EBS CSI driver with gp3 storage class
 - **Networking**: Calico CNI with ingress-nginx controller
 
-## 🚀 Quick Start
+## ⚡ Quick Commands
 
-### Prerequisites
-- AWS CLI configured
-- Terraform installed
-- kubectl installed
-- SSH key pair in AWS
-
-### 1. Deploy Infrastructure
 ```bash
-cd infra/terraform/aws
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values
-terraform init && terraform apply -auto-approve
+# Deploy cluster
+./deploy-full-automation.sh
+
+# Access cluster
+ssh ubuntu@$(cd infra/terraform/aws && terraform output -raw bastion_public_ip)
+ssh ubuntu@$(cd infra/terraform/aws && terraform output -json control_plane_private_ips | jq -r '.[0]')
+
+# Check cluster
+kubectl get nodes
+kubectl get pods -A
+kubectl get svc -n production
+
+# Destroy cluster
+cd infra/terraform/aws && terraform destroy -auto-approve
 ```
-
-### 2. Initialize Control Plane
-```bash
-# SSH to first control plane node
-ssh ubuntu@<cp1-ip>
-sudo kubeadm init --config /etc/kubeadm/kubeadm-config-aws.yaml --upload-certs
-```
-
-### 3. Install Components
-```bash
-# Set up kubectl
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
-
-# Install CNI and components
-./install-components.sh
-```
-
-### 4. Join Nodes
-Use the join commands from kubeadm init output to add control plane and worker nodes.
 
 ## 📁 Project Structure
 
 ```
 ├── infra/
-│   └── terraform/aws/          # AWS infrastructure
-├── k8s/
-│   ├── addons/                 # Kubernetes addons
-│   ├── aws/                    # AWS-specific manifests
-│   ├── cni/                    # Container Network Interface
-│   ├── ingress-nginx/          # Ingress controller
-│   ├── logging/                # Logging stack
-│   ├── monitoring/             # Monitoring stack
-│   └── storage/                # Storage classes
-├── apps/                       # Sample applications
-└── scripts/                    # Deployment scripts
+│   └── terraform/aws/          # AWS infrastructure + automation
+├── apps/
+│   └── sample-ha-app/          # Sample HA application (Helm chart)
+├── docs/                       # Complete documentation
+└── deploy-full-automation.sh   # One-command deployment
 ```
 
 ## 🔧 Components Included
@@ -88,7 +86,7 @@ Use the join commands from kubeadm init output to add control plane and worker n
 - **Certificates**: cert-manager
 - **Security**: Kyverno policies
 - **Monitoring**: metrics-server
-- **Logging**: Loki stack (optional)
+- **Auto-scaling**: HPA configured
 
 ## 🛡️ Security Features
 
@@ -102,7 +100,7 @@ Use the join commands from kubeadm init output to add control plane and worker n
 ## 📊 Monitoring & Observability
 
 - Metrics server for resource monitoring
-- Loki stack for centralized logging
+- HPA for auto-scaling
 - Grafana dashboards (optional)
 - Prometheus monitoring (optional)
 
@@ -117,9 +115,8 @@ Use the join commands from kubeadm init output to add control plane and worker n
 
 Key configuration files:
 - `infra/terraform/aws/terraform.tfvars` - Infrastructure settings
-- `k8s/addons/cert-manager/` - Certificate management
-- `k8s/addons/kyverno/` - Security policies
-- `apps/sample-ha-app/` - Sample HA application
+- `deploy-full-automation.sh` - One-command deployment
+- `infra/terraform/aws/user-data-k8s-init.sh` - Automated cluster initialization
 
 ## 🤝 Contributing
 
@@ -143,3 +140,5 @@ For issues and questions:
 ---
 
 **Built with ❤️ for production workloads**
+
+**No more manual commands - just run `./deploy-full-automation.sh` and get a production-ready cluster!** 🚀
