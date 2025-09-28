@@ -8,10 +8,14 @@ resource "aws_instance" "worker" {
   associate_public_ip_address = false
   iam_instance_profile        = aws_iam_instance_profile.nodes.name
   user_data                   = file("${path.module}/user-data.sh")
+  monitoring                  = true
+  ebs_optimized              = true
 
   root_block_device {
     volume_size = var.root_volume_gb
     volume_type = "gp3"
+    encrypted   = true
+    delete_on_termination = true
   }
 
   tags = {

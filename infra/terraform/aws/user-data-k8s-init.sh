@@ -84,9 +84,47 @@ helm install cert-manager jetstack/cert-manager -n cert-manager \
     --create-namespace \
     --set installCRDs=true || log "Cert Manager installation failed (may already exist)"
 
+log "Installing monitoring stack..."
+# Add monitoring repositories
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo add grafana https://grafana.github.io/helm-charts
+helm repo update
+
+# Install Prometheus + Grafana stack
+helm install kube-prometheus prometheus-community/kube-prometheus-stack -n monitoring \
+    --create-namespace \
+    --wait --timeout=10m || log "Prometheus stack installation failed"
+
+# Install Loki logging stack
+helm install loki grafana/loki-stack -n monitoring \
+    --set grafana.enabled=false \
+    --set prometheus.enabled=false \
+    --wait --timeout=5m || log "Loki installation failed"
+
+log "Installing security components..."
+# Add security repositories
+helm repo add falcosecurity https://falcosecurity.github.io/charts
+helm repo update
+
+# Install Falco runtime security
+helm install falco falcosecurity/falco -n falco \
+    --create-namespace \
+    --set falco.grpc.enabled=true \
+    --set falco.grpcOutput.enabled=true \
+    --wait --timeout=5m || log "Falco installation failed"
+
+# Install Gatekeeper
+kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/release-3.14/deploy/gatekeeper.yaml
+
+log "Waiting for security components..."
+sleep 60
+
 log "Creating production namespace..."
 # Create production namespace and deploy sample app
 kubectl create namespace production || log "Production namespace already exists"
+kubectl label namespace production name=production || true
+kubectl label namespace monitoring name=monitoring || true
+kubectl label namespace ingress-nginx name=ingress-nginx || true
 
 log "Deploying sample HA application..."
 kubectl apply -f - <<EOF

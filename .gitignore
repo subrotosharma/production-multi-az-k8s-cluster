@@ -7,6 +7,9 @@
 .terraform.lock.hcl
 terraform.tfplan
 
+# Terraform provider cache
+.terraform.lock.hcl
+
 # Kubernetes
 kubeconfig
 *.kubeconfig

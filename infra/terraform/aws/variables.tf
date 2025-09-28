@@ -44,8 +44,12 @@ variable "lb_internal" {
 }
 
 variable "my_ip_cidr" {
-  type    = string
-  default = "0.0.0.0/0"
+  type        = string
+  description = "Your public IP CIDR for secure access (e.g., 1.2.3.4/32)"
+  validation {
+    condition     = can(cidrhost(var.my_ip_cidr, 0))
+    error_message = "The my_ip_cidr value must be a valid CIDR block."
+  }
 }
 
 variable "instance_type_master" {

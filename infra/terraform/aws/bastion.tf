@@ -6,6 +6,14 @@ resource "aws_instance" "bastion" {
   key_name                    = var.key_pair_name
   associate_public_ip_address = true
   iam_instance_profile        = aws_iam_instance_profile.nodes.name
+  monitoring                  = true
+
+  root_block_device {
+    volume_type = "gp3"
+    volume_size = 20
+    encrypted   = true
+    delete_on_termination = true
+  }
 
   user_data = <<-CLOUD
     #cloud-config

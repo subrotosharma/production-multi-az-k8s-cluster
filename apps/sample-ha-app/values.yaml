@@ -1,4 +1,4 @@
-image: ghcr.io/your-org/sample-ha-app:latest
+image: nginx:1.21
 replicaCount: 6
 resources:
   requests: { cpu: "100m", memory: "128Mi" }

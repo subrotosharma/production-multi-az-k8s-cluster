@@ -1,323 +1,381 @@
 # Troubleshooting Guide
 
-Common issues and their solutions when deploying the production Kubernetes cluster.
+I've broken this cluster setup in every way imaginable while building it. Here are the issues you're most likely to hit and how to fix them.
 
-## 🚨 Infrastructure Issues
+## Before You Start Debugging
 
-### Terraform Errors
+**Check the basics first:**
+- Are you in the right AWS region? (Script assumes us-east-1)
+- Do you have admin AWS permissions?
+- Is your IP address correct in terraform.tfvars?
+- Did you wait long enough? Some operations take 5-10 minutes.
 
-**Error**: `InvalidKeyPair.NotFound`
+## Infrastructure Problems
+
+### Terraform Fails to Apply
+
+**"InvalidKeyPair.NotFound"**
 ```bash
-# Solution: Create EC2 key pair first
-aws ec2 create-key-pair --key-name your-keypair --query 'KeyMaterial' --output text > ~/.ssh/your-keypair.pem
-chmod 400 ~/.ssh/your-keypair.pem
+# You need to create an EC2 key pair first
+aws ec2 create-key-pair --key-name my-keypair --query 'KeyMaterial' --output text > ~/.ssh/my-keypair.pem
+chmod 400 ~/.ssh/my-keypair.pem
+
+# Update terraform.tfvars
+key_pair_name = "my-keypair"
 ```
 
-**Error**: `UnauthorizedOperation`
+**"UnauthorizedOperation"**
+Your AWS user doesn't have enough permissions. You need admin access for this to work. I know it's broad, but Kubernetes infrastructure touches everything.
+
 ```bash
-# Solution: Check AWS credentials and permissions
+# Check what user you're using
 aws sts get-caller-identity
-aws iam get-user
+
+# Make sure this user has admin permissions in IAM console
 ```
 
-**Error**: `LimitExceeded` for EC2 instances
+**"LimitExceeded" for EC2 instances**
+You've hit AWS service limits. This setup needs 10 instances (1 bastion + 3 masters + 6 workers).
+
 ```bash
-# Solution: Request limit increase or use smaller instances
-# Check current limits:
+# Check your limits
 aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A
+
+# Request an increase, or use fewer/smaller instances temporarily
+```
+
+**"InsufficientInstanceCapacity"**
+AWS doesn't have enough t3.xlarge instances in that AZ. Try a different region or instance type.
+
+```bash
+# In terraform.tfvars, try:
+instance_type_master = "t3.large"
+instance_type_worker = "t3.large"
 ```
 
 ### SSH Connection Issues
 
-**Error**: `Permission denied (publickey)`
+**"Permission denied (publickey)"**
 ```bash
-# Solution 1: Check key permissions
+# Check key permissions
 chmod 400 ~/.ssh/your-key.pem
 
-# Solution 2: Use correct username
-ssh -i ~/.ssh/your-key.pem ubuntu@<IP>  # Not ec2-user
+# Make sure you're using 'ubuntu' as the username
+ssh -i ~/.ssh/your-key.pem ubuntu@<IP>
 
-# Solution 3: Check security group allows SSH from your IP
-aws ec2 describe-security-groups --group-ids <SG_ID>
+# NOT 'ec2-user' or 'admin'
 ```
 
-**Error**: `Connection timeout`
+**"Connection timeout"**
+Your IP address is probably wrong in the security group.
+
 ```bash
-# Solution: Check your public IP and security group
+# Get your real public IP
 curl -s ipinfo.io/ip
-# Update terraform.tfvars with correct my_ip_cidr
+
+# Update terraform.tfvars with the correct IP
+my_ip_cidr = "YOUR_ACTUAL_IP/32"
+
+# Apply the change
+terraform apply
 ```
 
-## 🔧 Kubernetes Issues
+## Kubernetes Cluster Issues
 
-### kubeadm init Failures
+### kubeadm init Fails
 
-**Error**: `[ERROR Mem]: the system RAM (914 MB) is less than the minimum 1700 MB`
+**"[ERROR Mem]: the system RAM is less than the minimum"**
+You're using instances that are too small. t3.micro won't work.
+
 ```bash
-# Solution: Use larger instance types
-# In terraform.tfvars:
-instance_type_master = "t3.medium"  # Instead of t3.small
+# Use at least t3.medium
+instance_type_master = "t3.medium"
 ```
 
-**Error**: `context deadline exceeded` during API server wait
-```bash
-# Solution 1: Use local IP instead of DNS
-sudo sed -i 's/api.k8s.yourdomain.com/10.0.10.9/' /etc/kubeadm/kubeadm-config-aws.yaml
+**"context deadline exceeded" waiting for API server**
+This usually means the control plane endpoint is wrong. I've seen this when DNS isn't working.
 
-# Solution 2: Check if NLB is internal
-# In terraform.tfvars:
-lb_internal = true
+```bash
+# Use the local IP instead of DNS
+sudo sed -i 's/api.k8s.yourdomain.com/$(hostname -I | awk "{print $1}")/' /etc/kubeadm/kubeadm-config.yaml
 ```
 
-**Error**: `couldn't validate the identity of the API Server`
+**"couldn't validate the identity of the API Server"**
+The certificates are messed up. Reset and try again.
+
 ```bash
-# Solution: Reset and retry with correct config
 sudo kubeadm reset -f
-sudo kubeadm init --config /etc/kubeadm/kubeadm-config-local.yaml --upload-certs
+sudo rm -rf /etc/kubernetes/
+sudo systemctl restart kubelet
+# Then run kubeadm init again
 ```
 
-### Node Join Issues
+### Node Join Problems
 
-**Error**: `token has expired`
+**"token has expired"**
+Tokens only last 24 hours. Generate a new one.
+
 ```bash
-# Solution: Generate new token
+# On the first control plane node
 kubeadm token create --print-join-command
 ```
 
-**Error**: `certificate key has expired`
+**"certificate key has expired"**
+For control plane joins, you need a fresh certificate key.
+
 ```bash
-# Solution: Upload new certificates
 kubeadm init phase upload-certs --upload-certs
+# Use the new key in your join command
 ```
 
-**Error**: `connection refused` when joining
+**"connection refused"**
+The control plane isn't ready yet, or there's a firewall issue.
+
 ```bash
-# Solution: Check if control plane is ready
+# Check if the API server is running
 kubectl get nodes
-kubectl get pods -n kube-system
+sudo systemctl status kubelet
+
+# Check if the port is open
+sudo netstat -tlnp | grep :6443
 ```
 
 ### Pod Issues
 
-**Error**: Pods stuck in `Pending` state
+**Pods stuck in "Pending"**
+Usually means no worker nodes are ready, or resource constraints.
+
 ```bash
-# Diagnosis:
-kubectl describe pod <POD_NAME>
-kubectl get events --sort-by=.metadata.creationTimestamp
-
-# Common solutions:
-# 1. No worker nodes
-kubectl get nodes
-
-# 2. Resource constraints
-kubectl top nodes
+# Check node status
+kubectl get nodes -o wide
 kubectl describe nodes
 
-# 3. Taints on nodes
-kubectl describe nodes | grep -i taint
+# Check events
+kubectl get events --sort-by=.metadata.creationTimestamp
+
+# If nodes have taints, remove them
 kubectl taint nodes --all node-role.kubernetes.io/control-plane-
 ```
 
-**Error**: Pods in `ImagePullBackOff`
+**"ImagePullBackOff"**
+Can't pull the container image.
+
 ```bash
-# Diagnosis:
+# Check the image name
 kubectl describe pod <POD_NAME>
 
-# Solutions:
-# 1. Check image name and tag
-# 2. Check if image exists in registry
-# 3. Check pull secrets if using private registry
+# Test pulling manually
+sudo crictl pull nginx:1.21
 ```
 
-**Error**: `CrashLoopBackOff`
+**"CrashLoopBackOff"**
+The application is crashing on startup.
+
 ```bash
-# Diagnosis:
+# Check logs
 kubectl logs <POD_NAME> --previous
 kubectl describe pod <POD_NAME>
 
-# Common causes:
-# 1. Application configuration errors
-# 2. Missing environment variables
-# 3. Resource limits too low
+# Common cause: resource limits too low
+kubectl patch deployment <DEPLOYMENT> -p '{"spec":{"template":{"spec":{"containers":[{"name":"<CONTAINER>","resources":{"limits":{"memory":"512Mi"}}}]}}}}'
 ```
 
-### Networking Issues
+### Networking Problems
 
-**Error**: Pods can't communicate
+**Pods can't talk to each other**
+CNI isn't working properly.
+
 ```bash
-# Check CNI installation
+# Check Calico pods
 kubectl get pods -n kube-system | grep calico
-kubectl get nodes -o wide
 
-# Reinstall Calico if needed
-kubectl delete -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/calico.yaml
-kubectl apply -f https://raw.githubusercontent.com/projectcalico/calico/v3.26.1/manifests/calico.yaml
+# Restart Calico if needed
+kubectl delete pods -n kube-system -l k8s-app=calico-node
 ```
 
-**Error**: DNS resolution not working
+**DNS doesn't work**
+CoreDNS is probably broken.
+
 ```bash
+# Test DNS
+kubectl run test-dns --image=busybox --rm -it -- nslookup kubernetes.default
+
 # Check CoreDNS
 kubectl get pods -n kube-system | grep coredns
 kubectl logs -n kube-system deployment/coredns
 
-# Test DNS
-kubectl run test-dns --image=busybox --rm -it -- nslookup kubernetes.default
+# Restart if needed
+kubectl rollout restart deployment/coredns -n kube-system
 ```
 
-**Error**: LoadBalancer services stuck in `Pending`
+**LoadBalancer services stuck in "Pending"**
+You need the AWS Load Balancer Controller.
+
 ```bash
-# Check AWS Load Balancer Controller
+# Check if it's installed
 kubectl get pods -n kube-system | grep aws-load-balancer
 
-# Install if missing
+# Install it if missing
 kubectl apply -k "github.com/aws/aws-load-balancer-controller/deploy/kubernetes/overlays/stable/?ref=v2.6.0"
-
-# Check IAM permissions for nodes
-aws sts get-caller-identity
 ```
 
 ### Storage Issues
 
-**Error**: PVCs stuck in `Pending`
+**PVCs stuck in "Pending"**
+EBS CSI driver isn't working.
+
 ```bash
-# Check EBS CSI driver
+# Check the CSI driver
 kubectl get pods -n kube-system | grep ebs-csi
 
 # Check storage class
 kubectl get storageclass
 
-# Check node IAM permissions for EBS
-aws ec2 describe-volumes --region us-east-1
+# Make sure nodes have the right IAM permissions
+aws sts get-caller-identity
 ```
 
-**Error**: `failed to provision volume`
-```bash
-# Check EBS CSI controller logs
-kubectl logs -n kube-system deployment/ebs-csi-controller
+## Monitoring and Security Issues
 
-# Common issues:
-# 1. IAM permissions missing
-# 2. Availability zone mismatch
-# 3. Volume type not supported
+**Prometheus won't start**
+Usually a resource issue.
+
+```bash
+# Check pod status
+kubectl get pods -n monitoring
+
+# Look at events
+kubectl describe pod -n monitoring <PROMETHEUS_POD>
+
+# Common fix: increase resources in values.yaml
 ```
 
-## 🔍 Diagnostic Commands
+**Grafana shows no data**
+Prometheus isn't scraping metrics.
 
-### Cluster Health Check
 ```bash
-# Overall cluster status
-kubectl cluster-info
-kubectl get nodes -o wide
-kubectl get pods -A
+# Check Prometheus targets
+kubectl port-forward -n monitoring svc/kube-prometheus-kube-prome-prometheus 9090:9090
+# Open http://localhost:9090/targets
+```
 
-# Component status
-kubectl get componentstatuses
-kubectl get events --sort-by=.metadata.creationTimestamp
+**Falco not detecting anything**
+Check if it's actually running.
 
-# Resource usage
+```bash
+# Check Falco pods
+kubectl get pods -n falco
+
+# Look at logs
+kubectl logs -n falco daemonset/falco
+```
+
+## Performance Issues
+
+**Cluster is slow**
+Check resource usage.
+
+```bash
+# Node resources
 kubectl top nodes
+
+# Pod resources
 kubectl top pods -A
+
+# Look for resource-hungry pods
+kubectl get pods -A --sort-by=.status.containerStatuses[0].restartCount
 ```
 
-### Node Diagnostics
+**High memory usage**
+Probably too many pods on small instances.
+
 ```bash
-# Node details
-kubectl describe nodes
-kubectl get nodes --show-labels
+# Check pod distribution
+kubectl get pods -A -o wide
 
-# Node conditions
-kubectl get nodes -o custom-columns=NAME:.metadata.name,STATUS:.status.conditions[-1].type,REASON:.status.conditions[-1].reason
-
-# Kubelet logs
-sudo journalctl -u kubelet -f
+# Scale down non-essential workloads
+kubectl scale deployment <DEPLOYMENT> --replicas=1
 ```
 
-### Network Diagnostics
-```bash
-# CNI status
-kubectl get pods -n kube-system -l k8s-app=calico-node
-kubectl exec -n kube-system <calico-pod> -- calicoctl node status
+## Emergency Procedures
 
-# Service endpoints
-kubectl get endpoints
-kubectl get services -A
-
-# Network policies
-kubectl get networkpolicies -A
-```
-
-### Storage Diagnostics
-```bash
-# Storage classes
-kubectl get storageclass
-kubectl describe storageclass gp3
-
-# Persistent volumes
-kubectl get pv
-kubectl get pvc -A
-
-# CSI driver status
-kubectl get pods -n kube-system | grep csi
-kubectl get csinodes
-```
-
-## 🛠️ Recovery Procedures
-
-### Reset Single Node
+### Reset a Single Node
 ```bash
 # On the problematic node
 sudo kubeadm reset -f
+sudo rm -rf /etc/kubernetes/
 sudo systemctl restart kubelet
-sudo systemctl restart containerd
 
-# Rejoin the node
-kubeadm join <CONTROL_PLANE_IP>:6443 --token <TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>
+# Rejoin with fresh token
+kubeadm join <CONTROL_PLANE_IP>:6443 --token <NEW_TOKEN> --discovery-token-ca-cert-hash sha256:<HASH>
 ```
 
-### Reset Entire Cluster
+### Reset the Entire Cluster
 ```bash
 # On all nodes
 sudo kubeadm reset -f
+sudo rm -rf /etc/kubernetes/
 
-# On first control plane
-sudo kubeadm init --config /etc/kubeadm/kubeadm-config-local.yaml --upload-certs
-
-# Rejoin all other nodes
+# Start over with kubeadm init on first control plane
 ```
 
-### Backup and Restore etcd
+### Backup etcd (Do this regularly!)
 ```bash
-# Backup
-sudo ETCDCTL_API=3 etcdctl snapshot save /backup/etcd-snapshot.db \
+sudo ETCDCTL_API=3 etcdctl snapshot save /backup/etcd-$(date +%Y%m%d-%H%M%S).db \
     --endpoints=https://127.0.0.1:2379 \
     --cacert=/etc/kubernetes/pki/etcd/ca.crt \
     --cert=/etc/kubernetes/pki/etcd/server.crt \
     --key=/etc/kubernetes/pki/etcd/server.key
-
-# Restore
-sudo ETCDCTL_API=3 etcdctl snapshot restore /backup/etcd-snapshot.db \
-    --data-dir=/var/lib/etcd-restore
 ```
 
-## 📞 Getting Help
+## Getting Help
 
-### Log Collection
+### Collect Debug Info
 ```bash
-# Collect all relevant logs
-mkdir -p /tmp/k8s-logs
-kubectl logs -n kube-system deployment/coredns > /tmp/k8s-logs/coredns.log
-kubectl get events -A > /tmp/k8s-logs/events.log
-kubectl describe nodes > /tmp/k8s-logs/nodes.log
-sudo journalctl -u kubelet > /tmp/k8s-logs/kubelet.log
+# Create a debug bundle
+mkdir -p /tmp/k8s-debug
+kubectl cluster-info dump > /tmp/k8s-debug/cluster-info.log
+kubectl get events -A > /tmp/k8s-debug/events.log
+kubectl get pods -A -o wide > /tmp/k8s-debug/pods.log
+kubectl describe nodes > /tmp/k8s-debug/nodes.log
+sudo journalctl -u kubelet --since "1 hour ago" > /tmp/k8s-debug/kubelet.log
+
+tar -czf k8s-debug-$(date +%Y%m%d-%H%M%S).tar.gz -C /tmp k8s-debug/
 ```
 
-### Useful Resources
-- [Kubernetes Troubleshooting](https://kubernetes.io/docs/tasks/debug-application-cluster/)
-- [kubeadm Troubleshooting](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/troubleshooting-kubeadm/)
-- [AWS EKS Best Practices](https://aws.github.io/aws-eks-best-practices/)
-- [Calico Troubleshooting](https://docs.projectcalico.org/maintenance/troubleshoot/)
+### Where to Ask
+- **GitHub Issues**: For problems with this specific setup
+- **Kubernetes Slack**: #kubeadm channel for general kubeadm issues
+- **Stack Overflow**: kubernetes, kubeadm, aws tags
 
-### Community Support
-- Kubernetes Slack: #kubeadm, #sig-cluster-lifecycle
-- AWS Forums: AWS Container Services
-- Stack Overflow: kubernetes, amazon-eks tags
+## My Debugging Process
+
+When something breaks, I follow this order:
+
+1. **Check the obvious stuff** - permissions, networking, resources
+2. **Look at events** - `kubectl get events --sort-by=.metadata.creationTimestamp`
+3. **Check logs** - kubelet logs, pod logs, system logs
+4. **Verify connectivity** - can nodes talk to each other?
+5. **Test components** - is DNS working? Can you pull images?
+6. **Reset if needed** - sometimes it's faster to start over
+
+## Prevention
+
+**Things I do to avoid problems:**
+- Always test in a dev environment first
+- Keep backups of etcd
+- Monitor resource usage
+- Update components regularly
+- Document any custom changes
+
+**Things that will save you time:**
+- Use the automation script instead of manual deployment
+- Set up monitoring from day one
+- Keep your AWS credentials and permissions organized
+- Test disaster recovery procedures before you need them
+
+---
+
+**Remember**: Kubernetes is complex. Don't feel bad if it takes time to debug issues. I've been doing this for years and still learn new things every time something breaks.
+
+The automation script handles most of these edge cases, which is why I recommend using it unless you're specifically trying to learn the manual process.

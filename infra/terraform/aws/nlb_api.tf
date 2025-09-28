@@ -14,9 +14,12 @@ resource "aws_lb_target_group" "api" {
   vpc_id      = aws_vpc.this.id
   target_type = "instance"
   health_check {
-    enabled  = true
-    port     = "6443"
-    protocol = "TCP"
+    enabled             = true
+    port                = "6443"
+    protocol            = "TCP"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    interval            = 10
   }
 }
 
